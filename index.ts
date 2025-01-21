@@ -7,6 +7,7 @@ import {
   generateSigner,
   keypairIdentity,
   percentAmount,
+  publicKey,
 } from "@metaplex-foundation/umi";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 import { irysUploader } from "@metaplex-foundation/umi-uploader-irys";
@@ -27,7 +28,7 @@ const main = async () => {
 
   // load keypair from local file system
   // See https://github.com/solana-developers/helpers?tab=readme-ov-file#get-a-keypair-from-a-keypair-file
-  const user = await getKeypairFromFile();
+  const user = await getKeypairFromFile("");
 
   // convert to umi compatible keypair
   const umiKeypair = umi.eddsa.createKeypairFromSecretKey(user.secretKey);
@@ -77,6 +78,52 @@ const main = async () => {
   console.log(`Collection NFT:  ${explorerLink}`);
   console.log(`Collection NFT address is:`, collectionMint.publicKey);
   console.log("✅ Finished successfully!");
+
+  const collectionPublicKey = publicKey(collectionMint.publicKey);
+
+  const nftImagePath = path.resolve(__dirname, "nft.png");
+  const nftBuffer = await fs.readFile(nftImagePath);
+  let nftFile = createGenericFile(nftBuffer, nftImagePath, {
+    contentType: "image/png",
+  });
+  const [nftImage] = await umi.uploader.upload([nftFile]);
+  console.log("NFT image uri:", nftImage);
+
+  const nftUri = await umi.uploader.uploadJson({
+    name: "My NFT Item",
+    symbol: "NFT",
+    description: "This is my NFT item description",
+    image,
+    attributes: [
+      {
+        trait_type: "Background",
+        value: "Blue",
+      },
+      {
+        trait_type: "Rarity",
+        value: "Rare",
+      },
+    ],
+  });
+  console.log("NFT metadata URI:", uri);
+
+  const nftMint = generateSigner(umi);
+
+  await createNft(umi, {
+    mint: nftMint,
+    name: "My NFT Item",
+    uri,
+    sellerFeeBasisPoints: percentAmount(5),
+    collection: {
+      key: collectionPublicKey,
+      verified: false,
+    },
+  }).sendAndConfirm(umi, { send: { commitment: "finalized" } });
+
+  let nftExplorerLink = getExplorerLink("address", nftMint.publicKey, "devnet");
+  console.log(`NFT:  ${nftExplorerLink}`);
+  console.log(`NFT address is:`, nftMint.publicKey);
+  console.log("✅ NFT created successfully!");
 };
 
 main();
